@@ -1,0 +1,9 @@
+# Credentials
+credentials.txt
+
+# Reports directory
+reports/
+
+*.html
+
+*.json
