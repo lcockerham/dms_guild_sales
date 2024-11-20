@@ -167,15 +167,6 @@ def clean_value_for_checks(value):
         return value if not pd.isna(value) else ""
     else:
         return str(value).strip()
-    
-def clean_value_for_checks(value):
-    """Clean and convert values to be compatible with Google Sheets."""
-    if pd.isna(value):
-        return ""
-    elif isinstance(value, (int, float)):
-        return value if not pd.isna(value) else ""
-    else:
-        return str(value).strip()
 
 def get_last_month_dates():
     today = date.today()
@@ -465,11 +456,15 @@ def verify_data_for_sheets(df):
     return len(issues) == 0
 
 if __name__ == "__main__":
-    credentials_file = "credentials.txt"
-    encryption_key = "sEXL201%QPIu"
+    CREDENTIALS_FILE = "credentials.txt"
+    # Store key in environment variable, not code
+    # Command to create key in powershell: $env:DMSGUILD_ENCRYPTION_KEY = "my_key_here"
+    encryption_key = os.getenv('DMSGUILD_ENCRYPTION_KEY')
+    if not encryption_key:
+        raise ValueError("DMSGUILD_ENCRYPTION_KEY environment variable not set")
     
     # Google Sheets configuration
-    GOOGLE_SHEETS_CREDENTIALS = "arctic-sign-398401-520cfea4d1ef.json"
+    GOOGLE_SHEETS_CREDENTIALS = "arctic-sign-398401-5f09044d1b14.json"
     SPREADSHEET_ID = "1mtdp0DCDFWEVJPlb44MuNdqJnZCV9IDhPbFnDyj1G1Q"
     
     # Check for existing report first
@@ -480,8 +475,8 @@ if __name__ == "__main__":
         print("Using existing report for this month")
     else:
         print("No existing report found for this month. Fetching new data...")
-        if os.path.exists(credentials_file):
-            username, password = read_credentials(credentials_file, encryption_key)
+        if os.path.exists(CREDENTIALS_FILE):
+            username, password = read_credentials(CREDENTIALS_FILE, encryption_key)
             df = fetch_dmsguild_royalties(username, password)
             
             if df is not None:
@@ -492,8 +487,8 @@ if __name__ == "__main__":
             print("Credentials file not found. Let's create one.")
             username = input("Enter your DMs Guild username: ")
             password = input("Enter your DMs Guild password: ")
-            write_credentials(credentials_file, username, password, encryption_key)
-            print(f"Credentials saved to {credentials_file}")
+            write_credentials(CREDENTIALS_FILE, username, password, encryption_key)
+            print(f"Credentials saved to {CREDENTIALS_FILE}")
             df = fetch_dmsguild_royalties(username, password)
             if df is not None:
                 save_to_local_file(df, report_filepath)
