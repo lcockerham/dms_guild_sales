@@ -23,76 +23,79 @@ def save_to_local_file(df, output_dir="reports"):
     # Create reports directory if it doesn't exist
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    
+
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m")
     filename = f"dmsguild_report_{timestamp}.csv"
     filepath = os.path.join(output_dir, filename)
-    
+
     # Save to CSV
     df.to_csv(filepath, index=False)
     print(f"Report saved to: {filepath}")
     return filepath
 
 def update_google_sheet(df, spreadsheet_id, credentials_path):
-    """Append DataFrame content to Sheet1 of the Google Sheet, avoiding duplicates and applying formatting."""
+    """Append DataFrame content to Sheet1 of the Google Sheet, 
+    avoiding duplicates and applying formatting."""
     try:
         # Load credentials from service account file
         creds = service_account.Credentials.from_service_account_file(
             credentials_path,
             scopes=['https://www.googleapis.com/auth/spreadsheets']
         )
-        
+
         # Build the Sheets API service
         service = build('sheets', 'v4', credentials=creds)
-        
+
         # Get the month and year we're trying to add
         new_month = df['Month'].iloc[0]
         new_year = df['Year'].iloc[0]
         print(f"\nChecking for existing data for {new_month} {new_year}...")
-        
+
         # First, check if Sheet1 has any data and get headers
         result = service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
             range='Sheet1!A:I'
         ).execute()
-        
+
         if 'values' not in result or not result['values']:
             print("Sheet is empty, adding headers and data...")
             headers = df.columns.tolist()
-            values = [[clean_value_for_sheets(value) for value in row] for row in df.values.tolist()]
+            values = [[clean_value_for_sheets(value) 
+                       for value in row] for row in df.values.tolist()]
             values.insert(0, headers)
             range_name = 'Sheet1!A1'
             start_row = 1
         else:
             existing_data = result['values']
             headers = existing_data[0]
-            
+
             # Find Month and Year column indices
             try:
                 month_idx = headers.index('Month')
                 year_idx = headers.index('Year')
             except ValueError:
                 raise ValueError("Could not find Month or Year columns in existing sheet")
-            
+
             # Check for existing entries with same month/year
             duplicate_found = False
             for row in existing_data[1:]:
-                if (len(row) > max(month_idx, year_idx) and 
-                    row[month_idx] == new_month and 
+                if (len(row) > max(month_idx, year_idx) and
+                    row[month_idx] == new_month and
                     str(row[year_idx]) == str(new_year)):
                     duplicate_found = True
                     break
-            
+
             if duplicate_found:
                 print(f"Data for {new_month} {new_year} already exists in sheet. Skipping update.")
                 return False
-            
+
             print(f"No existing data found for {new_month} {new_year}. Proceeding with update...")
-            values = [[clean_value_for_sheets(value) for value in row] for row in df.values.tolist()]
+            values = [[clean_value_for_sheets(value) 
+                       for value in row] for row in df.values.tolist()]
             start_row = len(existing_data) + 1
             range_name = f'Sheet1!A{start_row}'
-        
+
         # Update the sheet with the new data
         result = service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
@@ -100,19 +103,19 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
             valueInputOption='RAW',
             body={'values': values}
         ).execute()
-        
+
         print(f"Updated Google Sheet: {result.get('updatedCells')} cells updated at {range_name}")
-        
+
         # Apply currency formatting to Net and Royalties columns
         try:
             # Find the indices for Net and Royalties columns
             net_idx = df.columns.get_loc('Net')
             royalties_idx = df.columns.get_loc('Royalties')
-            
+
             # Convert column indices to A1 notation
             net_column = chr(65 + net_idx)  # 65 is ASCII for 'A'
             royalties_column = chr(65 + royalties_idx)
-            
+
             # Create formatting request
             requests = []
             for column, column_letter in [(net_idx, net_column), (royalties_idx, royalties_column)]:
@@ -135,21 +138,21 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
                         'fields': 'userEnteredFormat.numberFormat'
                     }
                 })
-            
+
             # Apply the formatting
             body = {'requests': requests}
             service.spreadsheets().batchUpdate(
                 spreadsheetId=spreadsheet_id,
                 body=body
             ).execute()
-            
+
             print(f"Applied currency formatting to columns {net_column} and {royalties_column}")
-            
+
         except Exception as e:
             print(f"Warning: Could not apply currency formatting: {str(e)}")
-        
+
         return True
-        
+
     except HttpError as error:
         print(f"An error occurred: {error}")
         print("\nDebug: Error details:")
@@ -169,52 +172,61 @@ def clean_value_for_checks(value):
         return str(value).strip()
 
 def get_last_month_dates():
+    """Get the start and end dates for the last month."""
     today = date.today()
     first_of_this_month = today.replace(day=1)
     last_month_end = first_of_this_month - relativedelta(days=1)
     last_month_start = last_month_end.replace(day=1)
-    
+
     return last_month_start.strftime('%Y-%m-%d'), last_month_end.strftime('%Y-%m-%d')
 
 def encrypt(text, key):
-    return base64.urlsafe_b64encode(''.join(chr(ord(c) ^ ord(k)) for c, k in zip(text, key * len(text))).encode()).decode()
+    """Encrypt the text using XOR with the key and base64 encoding."""
+    return base64.urlsafe_b64encode(''.join(chr(ord(c) ^ ord(k)) for c, k in zip(
+        text, key * len(text))).encode()).decode()
 
 def decrypt(text, key):
-    return ''.join(chr(ord(c) ^ ord(k)) for c, k in zip(base64.urlsafe_b64decode(text).decode(), key * len(text)))
+    """Decrypt the text using XOR with the key and base64 decoding."""
+    return ''.join(chr(ord(c) ^ ord(k)) for c, k in zip(
+        base64.urlsafe_b64decode(text).decode(), key * len(text))
+    )
 
 def read_credentials(file_path, key):
+    """Read and decrypt the credentials from a file."""
     with open(file_path, 'r') as file:
         username = file.readline().strip()
         encrypted_password = file.readline().strip()
-    
+
     password = decrypt(encrypted_password, key)
     return username, password
 
 def write_credentials(file_path, username, password, key):
+    """Encrypt and write the credentials to a file."""
     encrypted_password = encrypt(password, key)
     with open(file_path, 'w') as file:
         file.write(f"{username}\n{encrypted_password}")
 
 def process_sales_table(html_content, month, year):
+    """Process the HTML content of the sales table into a DataFrame."""
     # Parse the HTML
     soup = BeautifulSoup(html_content, 'html.parser')
-    
+
     print("\nDebugging table content:")
     print(html_content)
-    
+
     # Get all rows
     rows = soup.find_all('tr')
     print(f"\nFound {len(rows)} rows in the table")
-    
+
     if len(rows) < 2:  # Need at least header and one data row
         print("Not enough rows found in table")
         return None
-    
+
     # Print first few rows for debugging
     for i, row in enumerate(rows[:3]):
         print(f"\nRow {i} contains {len(row.find_all('td'))} columns:")
         print(row.prettify())
-    
+
     # Skip header row, process until the total row
     data_rows = []
     for row in rows[1:]:  # Skip header
@@ -222,7 +234,7 @@ def process_sales_table(html_content, month, year):
         if len(cols) != 7:  # If not a standard data row
             print(f"Skipping row with {len(cols)} columns (probably total row)")
             continue
-            
+    
         try:
             row_data = {
                 'Publisher': cols[0].text.strip(),
@@ -239,34 +251,35 @@ def process_sales_table(html_content, month, year):
             print("Row content:")
             print(row.prettify())
             continue
-    
+
     if not data_rows:
         print("No valid data rows found")
         return None
-        
+   
     # Create DataFrame
     df = pd.DataFrame(data_rows)
-    
+
     # Add Month and Year columns
     df['Month'] = calendar.month_name[month]
     df['Year'] = year
-    
+
     # Reorder columns to put Month and Year first
     columns_order = ['Month', 'Year', 'Publisher', 'Title', 'SKU', 'Units_Sold', 
                      'Net', 'Royalty_Rate', 'Royalties']
     df = df[columns_order]
-    
+
     return df
 
 def fetch_dmsguild_royalties(username, password):
+    """"Log in to DM's guild and fetch the royalty report for the last month."""
     # Calculate date range for last month
     start_date, end_date = get_last_month_dates()
     print(f"Fetching royalty report for date range: {start_date} to {end_date}")
-    
+  
     # Set up Chrome options
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
-    
+
     # Set up the webdriver with Chrome options
     driver = webdriver.Chrome(options=chrome_options)
     try:
@@ -276,12 +289,12 @@ def fetch_dmsguild_royalties(username, password):
         # click the login link to get to the login modal for existing users
         login_link = driver.find_element(By.CSS_SELECTOR, "a.login_window")
         driver.execute_script("arguments[0].click();", login_link)
-        
+
         username_field = WebDriverWait(driver, 20).until(
             EC.presence_of_element_located((By.ID, "login_email_address"))
         )
         print("Found email address field")
-    
+
         password_field = driver.find_element(By.ID, "login_password")
         print("Found password field")
 
@@ -295,7 +308,8 @@ def fetch_dmsguild_royalties(username, password):
 
         # Wait for login to complete and find the Account link
         account_link = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "a.nav-bar-link[href='https://www.dmsguild.com/account.php']"))
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "a.nav-bar-link[href='https://www.dmsguild.com/account.php']"))
         )
         print("Found Account link, clicking...")
         account_link.click()
@@ -303,7 +317,8 @@ def fetch_dmsguild_royalties(username, password):
         # Wait for the account page to load and find the Royalty Report link
         print("Looking for Royalty Report link...")
         royalty_link = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='https://www.dmsguild.com/royalty_report.php']"))
+            EC.element_to_be_clickable(
+                (By.CSS_SELECTOR, "a[href='https://www.dmsguild.com/royalty_report.php']"))
         )
         print("Found Royalty Report link, clicking...")
         royalty_link.click()
@@ -342,15 +357,16 @@ def fetch_dmsguild_royalties(username, password):
 
         # Wait for results table to appear and be populated
         print("Waiting for results table to load...")
-        
+
         # First wait for any existing table to be cleared/removed (in case there was one)
         time.sleep(2)
-        
+
         # Then wait for the new table with results
         table = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "table[cellpadding='5'][cellspacing='0'][border='1']"))
+            EC.presence_of_element_located(
+                (By.CSS_SELECTOR, "table[cellpadding='5'][cellspacing='0'][border='1']"))
         )
-        
+
         # Additional wait to ensure table is fully populated
         time.sleep(2)
         
@@ -360,15 +376,15 @@ def fetch_dmsguild_royalties(username, password):
         )
 
         print("Table loaded, extracting data...")
-        
+
         # Get the HTML content
         table_html = table.get_attribute('outerHTML')
-        
+
         # Save the HTML content for debugging
         with open("table_debug.html", "w", encoding="utf-8") as f:
             f.write(table_html)
         print("Saved table HTML to table_debug.html")
-        
+
         # Get month and year from the date range
         report_date = datetime.strptime(start_date, '%Y-%m-%d')
         month = report_date.month
@@ -376,13 +392,13 @@ def fetch_dmsguild_royalties(username, password):
 
         # Process the table into a DataFrame
         df = process_sales_table(table_html, month, year)
-        
+
         if df is not None:
             print("\nExtracted data into DataFrame:")
             print(df)
         else:
             print("Failed to create DataFrame from table data")
-        
+
         input("Press Enter to continue...")
         return df
 
@@ -398,7 +414,7 @@ def get_report_filepath(output_dir="reports"):
     """Generate the expected filepath for the current month's report."""
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    
+
     timestamp = datetime.now().strftime("%Y%m")
     filename = f"dmsguild_report_{timestamp}.csv"
     return os.path.join(output_dir, filename)
@@ -433,18 +449,18 @@ def clean_value_for_sheets(value):
 def verify_data_for_sheets(df):
     """Verify that DataFrame contains valid data for Google Sheets."""
     issues = []
-    
+
     # Check for NaN values
     nan_counts = df.isna().sum()
     if nan_counts.any():
         issues.extend([f"Column '{col}' has {count} NaN values" 
                       for col, count in nan_counts.items() if count > 0])
-    
+
     # Check data types
     for col in df.columns:
         if df[col].dtype not in [np.int64, np.float64, object]:
             issues.append(f"Column '{col}' has unusual dtype: {df[col].dtype}")
-    
+
     # Print verification results
     if issues:
         print("\nData verification found issues:")
@@ -452,7 +468,7 @@ def verify_data_for_sheets(df):
             print(f"- {issue}")
     else:
         print("\nData verification passed")
-    
+
     return len(issues) == 0
 
 if __name__ == "__main__":
@@ -462,7 +478,7 @@ if __name__ == "__main__":
     encryption_key = os.getenv('DMSGUILD_ENCRYPTION_KEY')
     if not encryption_key:
         raise ValueError("DMSGUILD_ENCRYPTION_KEY environment variable not set")
-    
+
     #store the credentials in the environment variables
     # $env:GOOGLE_SHEETS_CREDENTIALS = "my_key_name_here.json"
     # env:GOOGLE_SHEETS_SPREADSHEET_ID = "my_spreadsheet_id_here"
@@ -475,7 +491,7 @@ if __name__ == "__main__":
     # Check for existing report first
     report_filepath = get_report_filepath()
     df = load_existing_report(report_filepath)
-    
+
     if df is not None:
         print("Using existing report for this month")
     else:
@@ -497,7 +513,7 @@ if __name__ == "__main__":
             df = fetch_dmsguild_royalties(username, password)
             if df is not None:
                 save_to_local_file(df, report_filepath)
-    
+
     # Update Google Sheet if we have data
     if df is not None:
         try:
