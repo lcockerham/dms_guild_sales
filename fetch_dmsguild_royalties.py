@@ -61,7 +61,7 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
         if 'values' not in result or not result['values']:
             print("Sheet is empty, adding headers and data...")
             headers = df.columns.tolist()
-            values = [[clean_value_for_sheets(value) 
+            values = [[clean_value_for_sheets(value)
                        for value in row] for row in df.values.tolist()]
             values.insert(0, headers)
             range_name = 'Sheet1!A1'
@@ -91,7 +91,7 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
                 return False
 
             print(f"No existing data found for {new_month} {new_year}. Proceeding with update...")
-            values = [[clean_value_for_sheets(value) 
+            values = [[clean_value_for_sheets(value)
                        for value in row] for row in df.values.tolist()]
             start_row = len(existing_data) + 1
             range_name = f'Sheet1!A{start_row}'
@@ -161,7 +161,7 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         raise
-            
+
 def clean_value_for_checks(value):
     """Clean and convert values to be compatible with Google Sheets."""
     if pd.isna(value):
@@ -234,7 +234,7 @@ def process_sales_table(html_content, month, year):
         if len(cols) != 7:  # If not a standard data row
             print(f"Skipping row with {len(cols)} columns (probably total row)")
             continue
-    
+
         try:
             row_data = {
                 'Publisher': cols[0].text.strip(),
@@ -255,7 +255,7 @@ def process_sales_table(html_content, month, year):
     if not data_rows:
         print("No valid data rows found")
         return None
-   
+
     # Create DataFrame
     df = pd.DataFrame(data_rows)
 
@@ -264,7 +264,7 @@ def process_sales_table(html_content, month, year):
     df['Year'] = year
 
     # Reorder columns to put Month and Year first
-    columns_order = ['Month', 'Year', 'Publisher', 'Title', 'SKU', 'Units_Sold', 
+    columns_order = ['Month', 'Year', 'Publisher', 'Title', 'SKU', 'Units_Sold',
                      'Net', 'Royalty_Rate', 'Royalties']
     df = df[columns_order]
 
@@ -275,7 +275,7 @@ def fetch_dmsguild_royalties(username, password):
     # Calculate date range for last month
     start_date, end_date = get_last_month_dates()
     print(f"Fetching royalty report for date range: {start_date} to {end_date}")
-  
+
     # Set up Chrome options
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
@@ -369,7 +369,7 @@ def fetch_dmsguild_royalties(username, password):
 
         # Additional wait to ensure table is fully populated
         time.sleep(2)
-        
+
         # Also wait for at least one data row to appear
         WebDriverWait(driver, 10).until(
             EC.presence_of_element_located((By.CLASS_NAME, "standardText"))
@@ -453,7 +453,7 @@ def verify_data_for_sheets(df):
     # Check for NaN values
     nan_counts = df.isna().sum()
     if nan_counts.any():
-        issues.extend([f"Column '{col}' has {count} NaN values" 
+        issues.extend([f"Column '{col}' has {count} NaN values"
                       for col, count in nan_counts.items() if count > 0])
 
     # Check data types
@@ -499,7 +499,7 @@ if __name__ == "__main__":
         if os.path.exists(CREDENTIALS_FILE):
             username, password = read_credentials(CREDENTIALS_FILE, encryption_key)
             df = fetch_dmsguild_royalties(username, password)
-            
+    
             if df is not None:
                 # Save to local file
                 save_to_local_file(df, report_filepath)
@@ -519,7 +519,7 @@ if __name__ == "__main__":
         try:
             # Verify data first
             verify_data_for_sheets(df)
-            
+
             # Update Google Sheet
             update_google_sheet(df, SPREADSHEET_ID, GOOGLE_SHEETS_CREDENTIALS)
             print("Successfully updated Google Sheet")
