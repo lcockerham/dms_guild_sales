@@ -1,22 +1,68 @@
+
+"""
+DMs Guild Royalty Report Fetcher
+
+This module automates the process of fetching and processing royalty reports from DMs Guild
+(dmsguild.com). It handles website authentication, data extraction, local storage, and
+Google Sheets synchronization.
+
+The script performs the following main functions:
+1. Securely manages DMs Guild login credentials
+2. Automates browser interaction to fetch royalty reports
+3. Processes and cleans sales data
+4. Saves reports locally as CSV files
+5. Syncs data to Google Sheets with proper formatting
+
+Key Features:
+    - Secure credential storage with basic encryption
+    - Automated web navigation and data extraction
+    - Local CSV backup of reports
+    - Google Sheets integration with formatting
+    - Duplicate prevention in Google Sheets
+    - Error handling with screenshots for debugging
+
+Requirements:
+    - Python 3.x
+    - Chrome browser
+    - Google Cloud project with Sheets API enabled
+    - Service account credentials for Google Sheets API
+
+Required Packages:
+    - selenium: Web automation
+    - pandas: Data processing
+    - beautifulsoup4: HTML parsing
+    - google-api-python-client: Google Sheets integration
+    - python-dateutil: Date handling
+    - numpy: Numerical operations
+
+Usage:
+    python fetch_dmsguild_royalties.py
+
+Configuration:
+    - credentials.txt: Stores encrypted DMs Guild login details
+    - Google Sheets service account JSON file
+    - SPREADSHEET_ID: ID of target Google Sheet
+"""
 import os
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
 import pandas as pd
+import numpy as np
 import time
 import base64
 from datetime import datetime, date
 from dateutil.relativedelta import relativedelta
 from bs4 import BeautifulSoup
 import calendar
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
 from google.oauth2.credentials import Credentials
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import numpy as np
+
 
 def save_to_local_file(df_to_save, output_dir="reports"):
     """Save DataFrame to a local CSV file in the specified directory."""
@@ -53,10 +99,12 @@ def update_google_sheet(update_df, spreadsheet_id, credentials_path):
         print(f"\nChecking for existing data for {new_month} {new_year}...")
 
         # First, check if Sheet1 has any data and get headers
+        # pylint: disable=no-member
         result = service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
             range='Sheet1!A:I'
         ).execute()
+        # pylint: disable=no-member
         print("Accessed Google Sheet")
 
         if 'values' not in result or not result['values']:
@@ -98,12 +146,14 @@ def update_google_sheet(update_df, spreadsheet_id, credentials_path):
             range_name = f'Sheet1!A{start_row}'
 
         # Update the sheet with the new data
+        # pylint: disable=no-member
         result = service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=range_name,
             valueInputOption='RAW',
             body={'values': values}
         ).execute()
+        # pylint: disable=no-member
 
         print(f"Updated Google Sheet: {result.get('updatedCells')} cells updated at {range_name}")
 
@@ -119,7 +169,7 @@ def update_google_sheet(update_df, spreadsheet_id, credentials_path):
 
             # Create formatting request
             requests = []
-            for column, column_letter in [(net_idx, net_column), (royalties_idx, royalties_column)]:
+            for column in [(net_idx, net_column), (royalties_idx, royalties_column)]:
                 requests.append({
                     'repeatCell': {
                         'range': {
@@ -142,10 +192,12 @@ def update_google_sheet(update_df, spreadsheet_id, credentials_path):
 
             # Apply the formatting
             body = {'requests': requests}
+            # pylint: disable=no-member
             service.spreadsheets().batchUpdate(
                 spreadsheetId=spreadsheet_id,
                 body=body
             ).execute()
+            # pylint: disable=no-member
 
             print(f"Applied currency formatting to columns {net_column} and {royalties_column}")
 
@@ -320,12 +372,14 @@ def login_to_dmsguild(driver, username, password):
 def navigate_to_royalty_page(driver):
     """Navigate to the royalty report page."""
     account_link = WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, "a.nav-bar-link[href='https://www.dmsguild.com/account.php']"))
+        EC.element_to_be_clickable(
+            (By.CSS_SELECTOR, "a.nav-bar-link[href='https://www.dmsguild.com/account.php']"))
     )
     account_link.click()
 
     royalty_link = WebDriverWait(driver, 10).until(
-        EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='https://www.dmsguild.com/royalty_report.php']"))
+        EC.element_to_be_clickable(
+            (By.CSS_SELECTOR, "a[href='https://www.dmsguild.com/royalty_report.php']"))
     )
     royalty_link.click()
 
@@ -357,7 +411,8 @@ def set_date_range(driver, start_date, end_date):
 def extract_table_data(driver):
     """Extract the table HTML from the page."""
     table = WebDriverWait(driver, 20).until(
-        EC.presence_of_element_located((By.CSS_SELECTOR, "table[cellpadding='5'][cellspacing='0'][border='1']"))
+        EC.presence_of_element_located(
+            (By.CSS_SELECTOR, "table[cellpadding='5'][cellspacing='0'][border='1']"))
     )
     time.sleep(2)
 
@@ -394,9 +449,9 @@ def load_existing_report(filepath):
         print(f"Error loading existing report: {str(e)}")
         return None
 
-def save_to_local_file(df, filepath):
+def save_to_local_file(df_to_save, filepath):
     """Save DataFrame to a local CSV file."""
-    df.to_csv(filepath, index=False)
+    df_to_save.to_csv(filepath, index=False)
     print(f"Report saved to: {filepath}")
     return filepath
 
@@ -410,18 +465,18 @@ def clean_value_for_sheets(value):
         return str(value).strip()
 
 # Optional: Add a function to verify data before sending
-def verify_data_for_sheets(df):
+def verify_data_for_sheets(df_to_verify):
     """Verify that DataFrame contains valid data for Google Sheets."""
     issues = []
 
     # Check for NaN values
-    nan_counts = df.isna().sum()
+    nan_counts = df_to_verify.isna().sum()
     if nan_counts.any():
         issues.extend([f"Column '{col}' has {count} NaN values"
                       for col, count in nan_counts.items() if count > 0])
 
     # Check data types
-    for col in df.columns:
+    for col in df_to_verify.columns:
         if df[col].dtype not in [np.int64, np.float64, object]:
             issues.append(f"Column '{col}' has unusual dtype: {df[col].dtype}")
 
@@ -489,52 +544,3 @@ if __name__ == "__main__":
             print("Successfully updated Google Sheet")
         except Exception as e:
             print(f"Error updating Google Sheet: {str(e)}")
-
-"""
-DMs Guild Royalty Report Fetcher
-
-This module automates the process of fetching and processing royalty reports from DMs Guild
-(dmsguild.com). It handles website authentication, data extraction, local storage, and
-Google Sheets synchronization.
-
-The script performs the following main functions:
-1. Securely manages DMs Guild login credentials
-2. Automates browser interaction to fetch royalty reports
-3. Processes and cleans sales data
-4. Saves reports locally as CSV files
-5. Syncs data to Google Sheets with proper formatting
-
-Key Features:
-    - Secure credential storage with basic encryption
-    - Automated web navigation and data extraction
-    - Local CSV backup of reports
-    - Google Sheets integration with formatting
-    - Duplicate prevention in Google Sheets
-    - Error handling with screenshots for debugging
-
-Requirements:
-    - Python 3.x
-    - Chrome browser
-    - Google Cloud project with Sheets API enabled
-    - Service account credentials for Google Sheets API
-
-Required Packages:
-    - selenium: Web automation
-    - pandas: Data processing
-    - beautifulsoup4: HTML parsing
-    - google-api-python-client: Google Sheets integration
-    - python-dateutil: Date handling
-    - numpy: Numerical operations
-
-Usage:
-    python fetch_dmsguild_royalties.py
-
-Configuration:
-    - credentials.txt: Stores encrypted DMs Guild login details
-    - Google Sheets service account JSON file
-    - SPREADSHEET_ID: ID of target Google Sheet
-
-Author: [Your Name]
-Created: [Creation Date]
-"""
-
