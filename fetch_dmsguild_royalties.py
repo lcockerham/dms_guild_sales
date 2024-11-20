@@ -463,10 +463,15 @@ if __name__ == "__main__":
     if not encryption_key:
         raise ValueError("DMSGUILD_ENCRYPTION_KEY environment variable not set")
     
-    # Google Sheets configuration
-    GOOGLE_SHEETS_CREDENTIALS = "arctic-sign-398401-5f09044d1b14.json"
-    SPREADSHEET_ID = "1mtdp0DCDFWEVJPlb44MuNdqJnZCV9IDhPbFnDyj1G1Q"
-    
+    #store the credentials in the environment variables
+    # $env:GOOGLE_SHEETS_CREDENTIALS = "my_key_name_here.json"
+    # env:GOOGLE_SHEETS_SPREADSHEET_ID = "my_spreadsheet_id_here"
+    GOOGLE_SHEETS_CREDENTIALS = os.getenv('GOOGLE_SHEETS_CREDENTIALS')
+    SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_SPREADSHEET_ID')
+
+    if not GOOGLE_SHEETS_CREDENTIALS or not SPREADSHEET_ID:
+        raise ValueError("Missing required environment variables")
+
     # Check for existing report first
     report_filepath = get_report_filepath()
     df = load_existing_report(report_filepath)
