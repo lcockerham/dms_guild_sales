@@ -18,7 +18,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import numpy as np
 
-def save_to_local_file(df, output_dir="reports"):
+def save_to_local_file(df_to_save, output_dir="reports"):
     """Save DataFrame to a local CSV file in the specified directory."""
     # Create reports directory if it doesn't exist
     if not os.path.exists(output_dir):
@@ -30,11 +30,11 @@ def save_to_local_file(df, output_dir="reports"):
     filepath = os.path.join(output_dir, filename)
 
     # Save to CSV
-    df.to_csv(filepath, index=False)
+    df_to_save.to_csv(filepath, index=False)
     print(f"Report saved to: {filepath}")
     return filepath
 
-def update_google_sheet(df, spreadsheet_id, credentials_path):
+def update_google_sheet(update_df, spreadsheet_id, credentials_path):
     """Append DataFrame content to Sheet1 of the Google Sheet, 
     avoiding duplicates and applying formatting."""
     try:
@@ -48,8 +48,8 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
         service = build('sheets', 'v4', credentials=creds)
 
         # Get the month and year we're trying to add
-        new_month = df['Month'].iloc[0]
-        new_year = df['Year'].iloc[0]
+        new_month = update_df['Month'].iloc[0]
+        new_year = update_df['Year'].iloc[0]
         print(f"\nChecking for existing data for {new_month} {new_year}...")
 
         # First, check if Sheet1 has any data and get headers
@@ -57,12 +57,13 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
             spreadsheetId=spreadsheet_id,
             range='Sheet1!A:I'
         ).execute()
+        print("Accessed Google Sheet")
 
         if 'values' not in result or not result['values']:
             print("Sheet is empty, adding headers and data...")
-            headers = df.columns.tolist()
+            headers = update_df.columns.tolist()
             values = [[clean_value_for_sheets(value)
-                       for value in row] for row in df.values.tolist()]
+                       for value in row] for row in update_df.values.tolist()]
             values.insert(0, headers)
             range_name = 'Sheet1!A1'
             start_row = 1
@@ -92,7 +93,7 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
 
             print(f"No existing data found for {new_month} {new_year}. Proceeding with update...")
             values = [[clean_value_for_sheets(value)
-                       for value in row] for row in df.values.tolist()]
+                       for value in row] for row in update_df.values.tolist()]
             start_row = len(existing_data) + 1
             range_name = f'Sheet1!A{start_row}'
 
@@ -109,8 +110,8 @@ def update_google_sheet(df, spreadsheet_id, credentials_path):
         # Apply currency formatting to Net and Royalties columns
         try:
             # Find the indices for Net and Royalties columns
-            net_idx = df.columns.get_loc('Net')
-            royalties_idx = df.columns.get_loc('Royalties')
+            net_idx = update_df.columns.get_loc('Net')
+            royalties_idx = update_df.columns.get_loc('Royalties')
 
             # Convert column indices to A1 notation
             net_column = chr(65 + net_idx)  # 65 is ASCII for 'A'
@@ -271,144 +272,107 @@ def process_sales_table(html_content, month, year):
     return df
 
 def fetch_dmsguild_royalties(username, password):
-    """"Log in to DM's guild and fetch the royalty report for the last month."""
-    # Calculate date range for last month
+    """Main function to fetch royalty reports."""
     start_date, end_date = get_last_month_dates()
-    print(f"Fetching royalty report for date range: {start_date} to {end_date}")
-
     # Set up Chrome options
     chrome_options = Options()
     chrome_options.add_argument("--start-maximized")
 
     # Set up the webdriver with Chrome options
     driver = webdriver.Chrome(options=chrome_options)
+
     try:
-        # Navigate to the login page
-        driver.get("https://www.dmsguild.com/login.php")
+        driver = login_to_dmsguild(driver, username, password)
+        driver = navigate_to_royalty_page(driver)
+        driver = set_date_range(driver, start_date, end_date)
+        table_html = extract_table_data(driver)
 
-        # click the login link to get to the login modal for existing users
-        login_link = driver.find_element(By.CSS_SELECTOR, "a.login_window")
-        driver.execute_script("arguments[0].click();", login_link)
-
-        username_field = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located((By.ID, "login_email_address"))
-        )
-        print("Found email address field")
-
-        password_field = driver.find_element(By.ID, "login_password")
-        print("Found password field")
-
-        # Fill in the username and password
-        username_field.send_keys(username)
-        password_field.send_keys(password)
-
-        # Find and click the login button
-        login_button = driver.find_element(By.ID, "loginbutton")
-        login_button.click()
-
-        # Wait for login to complete and find the Account link
-        account_link = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, "a.nav-bar-link[href='https://www.dmsguild.com/account.php']"))
-        )
-        print("Found Account link, clicking...")
-        account_link.click()
-
-        # Wait for the account page to load and find the Royalty Report link
-        print("Looking for Royalty Report link...")
-        royalty_link = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable(
-                (By.CSS_SELECTOR, "a[href='https://www.dmsguild.com/royalty_report.php']"))
-        )
-        print("Found Royalty Report link, clicking...")
-        royalty_link.click()
-
-        # Wait for page load
-        time.sleep(3)
-        print("Setting date range...")
-
-        # Find and fill in the date fields using explicit waits
-        start_date_field = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.NAME, "startdate"))
-        )
-        end_date_field = driver.find_element(By.NAME, "enddate")
-
-        print("Found date fields, clearing existing values...")
-        # Clear existing values
-        start_date_field.clear()
-        end_date_field.clear()
-
-        print("Entering new dates...")
-        # Enter new dates using JavaScript
-        driver.execute_script(f"arguments[0].value = '{start_date}';", start_date_field)
-        driver.execute_script(f"arguments[0].value = '{end_date}';", end_date_field)
-
-        # Trigger change events
-        driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", start_date_field)
-        driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", end_date_field)
-
-        print("Looking for submit button...")
-        # Find and click the submit button
-        submit_button = driver.find_element(By.NAME, "submit_report")
-        print("Found submit button, clicking...")
-        submit_button.click()
-
-        print("Report submitted!")
-
-        # Wait for results table to appear and be populated
-        print("Waiting for results table to load...")
-
-        # First wait for any existing table to be cleared/removed (in case there was one)
-        time.sleep(2)
-
-        # Then wait for the new table with results
-        table = WebDriverWait(driver, 20).until(
-            EC.presence_of_element_located(
-                (By.CSS_SELECTOR, "table[cellpadding='5'][cellspacing='0'][border='1']"))
-        )
-
-        # Additional wait to ensure table is fully populated
-        time.sleep(2)
-
-        # Also wait for at least one data row to appear
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, "standardText"))
-        )
-
-        print("Table loaded, extracting data...")
-
-        # Get the HTML content
-        table_html = table.get_attribute('outerHTML')
-
-        # Save the HTML content for debugging
-        with open("table_debug.html", "w", encoding="utf-8") as f:
-            f.write(table_html)
-        print("Saved table HTML to table_debug.html")
-
-        # Get month and year from the date range
+        # Process the data
         report_date = datetime.strptime(start_date, '%Y-%m-%d')
-        month = report_date.month
-        year = report_date.year
+        df = process_sales_table(table_html, report_date.month, report_date.year)
 
-        # Process the table into a DataFrame
-        df = process_sales_table(table_html, month, year)
-
-        if df is not None:
-            print("\nExtracted data into DataFrame:")
-            print(df)
-        else:
-            print("Failed to create DataFrame from table data")
-
-        input("Press Enter to continue...")
         return df
-
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        print("Taking error screenshot...")
-        driver.save_screenshot("error_screenshot.png")
-        raise
+        handle_error(driver, e)
     finally:
         driver.quit()
+
+def login_to_dmsguild(driver, username, password):
+    """Handle the login process."""
+    driver.get("https://www.dmsguild.com/login.php")
+
+    login_link = driver.find_element(By.CSS_SELECTOR, "a.login_window")
+    driver.execute_script("arguments[0].click();", login_link)
+
+    username_field = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.ID, "login_email_address"))
+    )
+    password_field = driver.find_element(By.ID, "login_password")
+
+    username_field.send_keys(username)
+    password_field.send_keys(password)
+
+    login_button = driver.find_element(By.ID, "loginbutton")
+    login_button.click()
+
+    return driver
+
+def navigate_to_royalty_page(driver):
+    """Navigate to the royalty report page."""
+    account_link = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "a.nav-bar-link[href='https://www.dmsguild.com/account.php']"))
+    )
+    account_link.click()
+
+    royalty_link = WebDriverWait(driver, 10).until(
+        EC.element_to_be_clickable((By.CSS_SELECTOR, "a[href='https://www.dmsguild.com/royalty_report.php']"))
+    )
+    royalty_link.click()
+
+    return driver
+
+def set_date_range(driver, start_date, end_date):
+    """Set the date range for the report."""
+    time.sleep(3)
+
+    start_date_field = WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.NAME, "startdate"))
+    )
+    end_date_field = driver.find_element(By.NAME, "enddate")
+
+    start_date_field.clear()
+    end_date_field.clear()
+
+    driver.execute_script(f"arguments[0].value = '{start_date}';", start_date_field)
+    driver.execute_script(f"arguments[0].value = '{end_date}';", end_date_field)
+
+    driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", start_date_field)
+    driver.execute_script("arguments[0].dispatchEvent(new Event('change'));", end_date_field)
+
+    submit_button = driver.find_element(By.NAME, "submit_report")
+    submit_button.click()
+
+    return driver
+
+def extract_table_data(driver):
+    """Extract the table HTML from the page."""
+    table = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.CSS_SELECTOR, "table[cellpadding='5'][cellspacing='0'][border='1']"))
+    )
+    time.sleep(2)
+
+    WebDriverWait(driver, 10).until(
+        EC.presence_of_element_located((By.CLASS_NAME, "standardText"))
+    )
+
+    return table.get_attribute('outerHTML')
+
+def handle_error(driver, error):
+    """Handle errors with screenshot and re-raising."""
+    print(f"An error occurred: {str(error)}")
+    print("Taking error screenshot...")
+    driver.save_screenshot("error_screenshot.png")
+    raise
 
 def get_report_filepath(output_dir="reports"):
     """Generate the expected filepath for the current month's report."""
@@ -499,7 +463,7 @@ if __name__ == "__main__":
         if os.path.exists(CREDENTIALS_FILE):
             username, password = read_credentials(CREDENTIALS_FILE, encryption_key)
             df = fetch_dmsguild_royalties(username, password)
-    
+
             if df is not None:
                 # Save to local file
                 save_to_local_file(df, report_filepath)
@@ -525,3 +489,52 @@ if __name__ == "__main__":
             print("Successfully updated Google Sheet")
         except Exception as e:
             print(f"Error updating Google Sheet: {str(e)}")
+
+"""
+DMs Guild Royalty Report Fetcher
+
+This module automates the process of fetching and processing royalty reports from DMs Guild
+(dmsguild.com). It handles website authentication, data extraction, local storage, and
+Google Sheets synchronization.
+
+The script performs the following main functions:
+1. Securely manages DMs Guild login credentials
+2. Automates browser interaction to fetch royalty reports
+3. Processes and cleans sales data
+4. Saves reports locally as CSV files
+5. Syncs data to Google Sheets with proper formatting
+
+Key Features:
+    - Secure credential storage with basic encryption
+    - Automated web navigation and data extraction
+    - Local CSV backup of reports
+    - Google Sheets integration with formatting
+    - Duplicate prevention in Google Sheets
+    - Error handling with screenshots for debugging
+
+Requirements:
+    - Python 3.x
+    - Chrome browser
+    - Google Cloud project with Sheets API enabled
+    - Service account credentials for Google Sheets API
+
+Required Packages:
+    - selenium: Web automation
+    - pandas: Data processing
+    - beautifulsoup4: HTML parsing
+    - google-api-python-client: Google Sheets integration
+    - python-dateutil: Date handling
+    - numpy: Numerical operations
+
+Usage:
+    python fetch_dmsguild_royalties.py
+
+Configuration:
+    - credentials.txt: Stores encrypted DMs Guild login details
+    - Google Sheets service account JSON file
+    - SPREADSHEET_ID: ID of target Google Sheet
+
+Author: [Your Name]
+Created: [Creation Date]
+"""
+
