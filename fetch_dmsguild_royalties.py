@@ -134,7 +134,7 @@ def apply_currency_formatting(service, spreadsheet_id, df_to_format):
     try:
         net_idx = df_to_format.columns.get_loc('Net')
         royalties_idx = df_to_format.columns.get_loc('Royalties')
-  
+
         requests = []
         for column_idx in [net_idx, royalties_idx]:
             requests.append({
@@ -156,27 +156,6 @@ def apply_currency_formatting(service, spreadsheet_id, df_to_format):
                     'fields': 'userEnteredFormat.numberFormat'
                 }
             })
-        # for column_idx, column_letter in [(net_idx, chr(65 + net_idx)),
-        #                                 (royalties_idx, chr(65 + royalties_idx))]:
-        #     requests.append({
-        #         'repeatCell': {
-        #             'range': {
-        #                 'sheetId': 0,
-        #                 'startColumnIndex': column_idx,
-        #                 'endColumnIndex': column_idx + 1,
-        #                 'startRowIndex': 1
-        #             },
-        #             'cell': {
-        #                 'userEnteredFormat': {
-        #                     'numberFormat': {
-        #                         'type': 'CURRENCY',
-        #                         'pattern': '"$"#,##0.00'
-        #                     }
-        #                 }
-        #             },
-        #             'fields': 'userEnteredFormat.numberFormat'
-        #         }
-        #     })
     
         service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
@@ -197,9 +176,9 @@ def update_google_sheet(update_df, spreadsheet_id, credentials_path):
         if check_for_duplicate_entry(existing_data, new_month, new_year):
             print(f"Data for {new_month} {new_year} already exists in sheet. Skipping update.")
             return False
-        
+
         values, range_name = prepare_update_data(update_df, existing_data)
-    
+
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=range_name,
@@ -209,7 +188,7 @@ def update_google_sheet(update_df, spreadsheet_id, credentials_path):
     
         apply_currency_formatting(service, spreadsheet_id, update_df)
         return True
-     
+
     except HttpError as error:
         print(f"An error occurred: {error}")
         print(f"Spreadsheet ID: {spreadsheet_id}")
@@ -226,6 +205,7 @@ def clean_value_for_checks(value):
         return value if not pd.isna(value) else ""
     else:
         return str(value).strip()
+
 
 def get_last_month_dates():
     """Get the start and end dates for the last month."""
