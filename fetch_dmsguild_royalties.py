@@ -241,32 +241,84 @@ def write_credentials(file_path, username_to_write, password_to_write, key):
     with open(file_path, 'w', encoding='utf=8') as file:
         file.write(f"{username_to_write}\n{encrypted_password}")
 
+# def process_sales_table(html_content, month, year):
+#     """Process the HTML content of the sales table into a DataFrame."""
+#     # Parse the HTML
+#     soup = BeautifulSoup(html_content, 'html.parser')
+
+#     print("\nDebugging table content:")
+#     print(html_content)
+
+#     # Get all rows
+#     rows = soup.find_all('tr')
+#     print(f"\nFound {len(rows)} rows in the table")
+
+#     if len(rows) < 2:  # Need at least header and one data row
+#         print("Not enough rows found in table")
+#         return None
+
+#     # Print first few rows for debugging
+#     for i, row in enumerate(rows[:3]):
+#         print(f"\nRow {i} contains {len(row.find_all('td'))} columns:")
+#         print(row.prettify())
+
+#     # Skip header row, process until the total row
+#     data_rows = []
+#     for row in rows[1:]:  # Skip header
+#         cols = row.find_all('td')
+#         if len(cols) != 7:  # If not a standard data row
+#             print(f"Skipping row with {len(cols)} columns (probably total row)")
+#             continue
+
+#         try:
+#             row_data = {
+#                 'Publisher': cols[0].text.strip(),
+#                 'Title': cols[1].text.strip(),
+#                 'SKU': cols[2].text.strip(),
+#                 'Units_Sold': int(cols[3].text.strip() or '0'),
+#                 'Net': float(cols[4].text.strip().replace('$', '').replace(',', '') or '0'),
+#                 'Royalty_Rate': float(cols[5].text.strip().replace('%', '') or '0'),
+#                 'Royalties': float(cols[6].text.strip().replace('$', '').replace(',', '') or '0')
+#             }
+#             data_rows.append(row_data)
+#         except (IndexError, ValueError, AttributeError) as exc:
+#             print(f"Error processing row: {exc}")
+#             print("Row content:")
+#             print(row.prettify())
+#             continue
+
+#     if not data_rows:
+#         print("No valid data rows found")
+#         return None
+
+#     # Create DataFrame
+#     sales_df = pd.DataFrame(data_rows)
+
+#     # Add Month and Year columns
+#     sales_df['Month'] = calendar.month_name[month]
+#     sales_df['Year'] = year
+
+#     # Reorder columns to put Month and Year first
+#     columns_order = ['Month', 'Year', 'Publisher', 'Title', 'SKU', 'Units_Sold',
+#                      'Net', 'Royalty_Rate', 'Royalties']
+#     sales_df = sales_df[columns_order]
+
+#     return sales_df
+
 def process_sales_table(html_content, month, year):
     """Process the HTML content of the sales table into a DataFrame."""
-    # Parse the HTML
     soup = BeautifulSoup(html_content, 'html.parser')
-
-    print("\nDebugging table content:")
-    print(html_content)
-
-    # Get all rows
     rows = soup.find_all('tr')
     print(f"\nFound {len(rows)} rows in the table")
 
-    if len(rows) < 2:  # Need at least header and one data row
+    if len(rows) < 2:
         print("Not enough rows found in table")
-        return None
+        return pd.DataFrame()
 
-    # Print first few rows for debugging
-    for i, row in enumerate(rows[:3]):
-        print(f"\nRow {i} contains {len(row.find_all('td'))} columns:")
-        print(row.prettify())
-
-    # Skip header row, process until the total row
     data_rows = []
-    for row in rows[1:]:  # Skip header
+    for row in rows[1:]:
         cols = row.find_all('td')
-        if len(cols) != 7:  # If not a standard data row
+        if len(cols) != 7:
             print(f"Skipping row with {len(cols)} columns (probably total row)")
             continue
 
@@ -283,27 +335,20 @@ def process_sales_table(html_content, month, year):
             data_rows.append(row_data)
         except (IndexError, ValueError, AttributeError) as exc:
             print(f"Error processing row: {exc}")
-            print("Row content:")
             print(row.prettify())
             continue
 
     if not data_rows:
         print("No valid data rows found")
-        return None
+        return pd.DataFrame()
 
-    # Create DataFrame
     sales_df = pd.DataFrame(data_rows)
-
-    # Add Month and Year columns
     sales_df['Month'] = calendar.month_name[month]
     sales_df['Year'] = year
 
-    # Reorder columns to put Month and Year first
     columns_order = ['Month', 'Year', 'Publisher', 'Title', 'SKU', 'Units_Sold',
                      'Net', 'Royalty_Rate', 'Royalties']
-    sales_df = sales_df[columns_order]
-
-    return sales_df
+    return sales_df[columns_order]
 
 def fetch_dmsguild_royalties(dmsguild_username, dmsguild_password):
     """Main function to fetch royalty reports."""
@@ -437,12 +482,6 @@ def load_existing_report(filepath):
     except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
         print(f"Error loading existing report: {exc}")
         return None
-
-def save_to_local_file(df_to_save, filepath):
-    """Save DataFrame to a local CSV file."""
-    df_to_save.to_csv(filepath, index=False)
-    print(f"Report saved to: {filepath}")
-    return filepath
 
 def clean_value_for_sheets(value):
     """Clean and convert values to be compatible with Google Sheets."""
