@@ -202,10 +202,9 @@ def clean_value_for_checks(value):
     """Clean and convert values to be compatible with Google Sheets."""
     if pd.isna(value):
         return ""
-    elif isinstance(value, (int, float)):
+    if isinstance(value, (int, float)):
         return value if not pd.isna(value) else ""
-    else:
-        return str(value).strip()
+    return str(value).strip()
 
 
 def get_last_month_dates():
@@ -230,18 +229,18 @@ def decrypt(text, key):
 
 def read_credentials(file_path, key):
     """Read and decrypt the credentials from a file."""
-    with open(file_path, 'r') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:
         username = file.readline().strip()
         encrypted_password = file.readline().strip()
 
     password = decrypt(encrypted_password, key)
     return username, password
 
-def write_credentials(file_path, username, password, key):
+def write_credentials(file_path, username_to_write, password_to_write, key):
     """Encrypt and write the credentials to a file."""
-    encrypted_password = encrypt(password, key)
+    encrypted_password = encrypt(password_to_write, key)
     with open(file_path, 'w') as file:
-        file.write(f"{username}\n{encrypted_password}")
+        file.write(f"{username_to_write}\n{encrypted_password}")
 
 def process_sales_table(html_content, month, year):
     """Process the HTML content of the sales table into a DataFrame."""
@@ -294,20 +293,20 @@ def process_sales_table(html_content, month, year):
         return None
 
     # Create DataFrame
-    df = pd.DataFrame(data_rows)
+    sales_df = pd.DataFrame(data_rows)
 
     # Add Month and Year columns
-    df['Month'] = calendar.month_name[month]
-    df['Year'] = year
+    sales_df['Month'] = calendar.month_name[month]
+    sales_df['Year'] = year
 
     # Reorder columns to put Month and Year first
     columns_order = ['Month', 'Year', 'Publisher', 'Title', 'SKU', 'Units_Sold',
                      'Net', 'Royalty_Rate', 'Royalties']
-    df = df[columns_order]
+    sales_df = sales_df[columns_order]
 
-    return df
+    return sales_df
 
-def fetch_dmsguild_royalties(username, password):
+def fetch_dmsguild_royalties(dmsguild_username, dmsguild_password):
     """Main function to fetch royalty reports."""
     start_date, end_date = get_last_month_dates()
     # Set up Chrome options
@@ -318,16 +317,16 @@ def fetch_dmsguild_royalties(username, password):
     driver = webdriver.Chrome(options=chrome_options)
 
     try:
-        driver = login_to_dmsguild(driver, username, password)
+        driver = login_to_dmsguild(driver, dmsguild_username, dmsguild_password)
         driver = navigate_to_royalty_page(driver)
         driver = set_date_range(driver, start_date, end_date)
         table_html = extract_table_data(driver)
 
         # Process the data
         report_date = datetime.strptime(start_date, '%Y-%m-%d')
-        df = process_sales_table(table_html, report_date.month, report_date.year)
+        sales_df = process_sales_table(table_html, report_date.month, report_date.year)
 
-        return df
+        return sales_df
     except Exception as e:
         handle_error(driver, e)
     finally:
@@ -430,8 +429,8 @@ def load_existing_report(filepath):
             return pd.read_csv(filepath)
         return None
     except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
-       print(f"Error loading existing report: {exc}")
-       return None
+        print(f"Error loading existing report: {exc}")
+        return None
 
 def save_to_local_file(df_to_save, filepath):
     """Save DataFrame to a local CSV file."""
