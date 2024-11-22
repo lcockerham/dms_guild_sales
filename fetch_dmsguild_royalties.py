@@ -44,21 +44,20 @@ Configuration:
     - SPREADSHEET_ID: ID of target Google Sheet
 """
 import os
-import pandas as pd
-import numpy as np
 import time
 import base64
+import calendar
 from datetime import datetime, date
+import pandas as pd
+import numpy as np
 from dateutil.relativedelta import relativedelta
 from bs4 import BeautifulSoup
-import calendar
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.options import Options
-from selenium.common.exceptions import TimeoutException, ElementClickInterceptedException
-from google.oauth2.credentials import Credentials
+from selenium.common.exceptions import TimeoutException, WebDriverException
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -230,16 +229,16 @@ def decrypt(text, key):
 def read_credentials(file_path, key):
     """Read and decrypt the credentials from a file."""
     with open(file_path, 'r', encoding='utf-8') as file:
-        username = file.readline().strip()
+        existing_username = file.readline().strip()
         encrypted_password = file.readline().strip()
 
-    password = decrypt(encrypted_password, key)
-    return username, password
+    existing_password = decrypt(encrypted_password, key)
+    return existing_username, existing_password
 
 def write_credentials(file_path, username_to_write, password_to_write, key):
     """Encrypt and write the credentials to a file."""
     encrypted_password = encrypt(password_to_write, key)
-    with open(file_path, 'w') as file:
+    with open(file_path, 'w', encoding='utf=8') as file:
         file.write(f"{username_to_write}\n{encrypted_password}")
 
 def process_sales_table(html_content, month, year):
@@ -327,12 +326,16 @@ def fetch_dmsguild_royalties(dmsguild_username, dmsguild_password):
         sales_df = process_sales_table(table_html, report_date.month, report_date.year)
 
         return sales_df
-    except Exception as e:
-        handle_error(driver, e)
+    except (WebDriverException, TimeoutException) as e:
+        handle_error(driver, "Browser automation error: " + str(e))
+    except ValueError as e:
+        handle_error(driver, "Data processing error: " + str(e))
+    except ConnectionError as e:
+        handle_error(driver, "Network error: " + str(e))
     finally:
         driver.quit()
 
-def login_to_dmsguild(driver, username, password):
+def login_to_dmsguild(driver, dmsguild_username, dmsguild_password):
     """Handle the login process."""
     driver.get("https://www.dmsguild.com/login.php")
 
@@ -344,8 +347,8 @@ def login_to_dmsguild(driver, username, password):
     )
     password_field = driver.find_element(By.ID, "login_password")
 
-    username_field.send_keys(username)
-    password_field.send_keys(password)
+    username_field.send_keys(dmsguild_username)
+    password_field.send_keys(dmsguild_password)
 
     login_button = driver.find_element(By.ID, "loginbutton")
     login_button.click()
@@ -410,7 +413,10 @@ def handle_error(driver, error):
     print(f"An error occurred: {str(error)}")
     print("Taking error screenshot...")
     driver.save_screenshot("error_screenshot.png")
-    raise
+    try:
+        raise
+    except:
+        raise
 
 def get_report_filepath(output_dir="reports"):
     """Generate the expected filepath for the current month's report."""
@@ -442,10 +448,9 @@ def clean_value_for_sheets(value):
     """Clean and convert values to be compatible with Google Sheets."""
     if pd.isna(value):
         return ""
-    elif isinstance(value, (int, float)):
+    if isinstance(value, (int, float)):
         return value if not pd.isna(value) else ""
-    else:
-        return str(value).strip()
+    return str(value).strip()
 
 # Optional: Add a function to verify data before sending
 def verify_data_for_sheets(df_to_verify):
