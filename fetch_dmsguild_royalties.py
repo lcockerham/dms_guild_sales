@@ -309,10 +309,13 @@ def fetch_dmsguild_royalties(dmsguild_username, dmsguild_password):
         return sales_df
     except (WebDriverException, TimeoutException) as e:
         handle_error(driver, "Browser automation error: " + str(e))
+        return pd.DataFrame()  # Return empty DataFrame on error
     except ValueError as e:
         handle_error(driver, "Data processing error: " + str(e))
+        return pd.DataFrame()  # Return empty DataFrame on error
     except ConnectionError as e:
         handle_error(driver, "Network error: " + str(e))
+        return pd.DataFrame()  # Return empty DataFrame on error
     finally:
         driver.quit()
 
@@ -393,11 +396,7 @@ def handle_error(driver, error):
     """Handle errors with screenshot and re-raising."""
     print(f"An error occurred: {str(error)}")
     print("Taking error screenshot...")
-    driver.save_screenshot("error_screenshot.png")
-    try:
-        raise
-    except:
-        raise
+    raise RuntimeError(str(error))
 
 def get_report_filepath(output_dir="reports"):
     """Generate the expected filepath for the current month's report."""
@@ -440,7 +439,7 @@ def verify_data_for_sheets(df_to_verify):
 
     # Check data types
     for col in df_to_verify.columns:
-        if df[col].dtype not in [np.int64, np.float64, object]:
+        if df_to_verify[col].dtype not in [np.int64, np.float64, object]:
             issues.append(f"Column '{col}' has unusual dtype: {df[col].dtype}")
 
     # Print verification results
