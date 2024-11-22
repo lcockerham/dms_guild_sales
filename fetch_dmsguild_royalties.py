@@ -156,13 +156,13 @@ def apply_currency_formatting(service, spreadsheet_id, df_to_format):
                     'fields': 'userEnteredFormat.numberFormat'
                 }
             })
-    
+
         service.spreadsheets().batchUpdate(
             spreadsheetId=spreadsheet_id,
             body={'requests': requests}
         ).execute()
-    except Exception as e:
-        print(f"Warning: Could not apply currency formatting: {str(e)}")
+    except (KeyError, IndexError) as exc:
+        print(f"Warning: Could not apply currency formatting: {exc}")
 
 def update_google_sheet(update_df, spreadsheet_id, credentials_path):
     """Update Google Sheet with new data, avoiding duplicates and applying formatting."""
@@ -170,22 +170,23 @@ def update_google_sheet(update_df, spreadsheet_id, credentials_path):
         service = get_sheet_service(credentials_path)
         new_month = update_df['Month'].iloc[0]
         new_year = update_df['Year'].iloc[0]
-    
+
         existing_data = get_existing_sheet_data(service, spreadsheet_id)
-    
+
         if check_for_duplicate_entry(existing_data, new_month, new_year):
             print(f"Data for {new_month} {new_year} already exists in sheet. Skipping update.")
             return False
 
         values, range_name = prepare_update_data(update_df, existing_data)
 
+        # pylint: disable=no-member
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=range_name,
             valueInputOption='RAW',
             body={'values': values}
         ).execute()
-    
+
         apply_currency_formatting(service, spreadsheet_id, update_df)
         return True
 
@@ -282,8 +283,8 @@ def process_sales_table(html_content, month, year):
                 'Royalties': float(cols[6].text.strip().replace('$', '').replace(',', '') or '0')
             }
             data_rows.append(row_data)
-        except Exception as e:
-            print(f"Error processing row: {e}")
+        except (IndexError, ValueError, AttributeError) as exc:
+            print(f"Error processing row: {exc}")
             print("Row content:")
             print(row.prettify())
             continue
@@ -428,9 +429,9 @@ def load_existing_report(filepath):
             print(f"Found existing report at: {filepath}")
             return pd.read_csv(filepath)
         return None
-    except Exception as e:
-        print(f"Error loading existing report: {str(e)}")
-        return None
+    except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as exc:
+       print(f"Error loading existing report: {exc}")
+       return None
 
 def save_to_local_file(df_to_save, filepath):
     """Save DataFrame to a local CSV file."""
@@ -525,5 +526,5 @@ if __name__ == "__main__":
             # Update Google Sheet
             update_google_sheet(df, SPREADSHEET_ID, GOOGLE_SHEETS_CREDENTIALS)
             print("Successfully updated Google Sheet")
-        except Exception as e:
-            print(f"Error updating Google Sheet: {str(e)}")
+        except (ValueError, HttpError, IOError) as exc:
+            print(f"Error updating Google Sheet: {exc}")
