@@ -80,135 +80,138 @@ def save_to_local_file(df_to_save, output_dir="reports"):
     print(f"Report saved to: {filepath}")
     return filepath
 
-def update_google_sheet(update_df, spreadsheet_id, credentials_path):
-    """Append DataFrame content to Sheet1 of the Google Sheet, 
-    avoiding duplicates and applying formatting."""
+def get_sheet_service(credentials_path):
+    """Initialize and return Google Sheets service."""
+    creds = service_account.Credentials.from_service_account_file(
+        credentials_path,
+        scopes=['https://www.googleapis.com/auth/spreadsheets']
+    )
+    return build('sheets', 'v4', credentials=creds)
+
+def get_existing_sheet_data(service, spreadsheet_id):
+    """Retrieve existing data from Google Sheet."""
+    result = service.spreadsheets().values().get(
+        spreadsheetId=spreadsheet_id,
+        range='Sheet1!A:I'
+    ).execute()
+    return result.get('values', [])
+
+def prepare_update_data(update_df, existing_data):
+    """Prepare data for sheet update."""
+    if not existing_data:
+        headers = update_df.columns.tolist()
+        values = [[clean_value_for_sheets(value) for value in row]
+                 for row in update_df.values.tolist()]
+        values.insert(0, headers)
+        return values, 'Sheet1!A1'
+
+    values = [[clean_value_for_sheets(value) for value in row]
+              for row in update_df.values.tolist()]
+    start_row = len(existing_data) + 1
+    return values, f'Sheet1!A{start_row}'
+
+def check_for_duplicate_entry(existing_data, new_month, new_year):
+    """Check if data for given month/year already exists."""
+    if not existing_data:
+        return False
+
+    headers = existing_data[0]
     try:
-        # Load credentials from service account file
-        creds = service_account.Credentials.from_service_account_file(
-            credentials_path,
-            scopes=['https://www.googleapis.com/auth/spreadsheets']
-        )
+        month_idx = headers.index('Month')
+        year_idx = headers.index('Year')
+    except ValueError as exc:
+        raise ValueError("Could not find Month or Year columns in existing sheet") from exc
 
-        # Build the Sheets API service
-        service = build('sheets', 'v4', credentials=creds)
+    for row in existing_data[1:]:
+        if (len(row) > max(month_idx, year_idx) and
+            row[month_idx] == new_month and
+            str(row[year_idx]) == str(new_year)):
+            return True
+    return False
 
-        # Get the month and year we're trying to add
+def apply_currency_formatting(service, spreadsheet_id, df_to_format):
+    """Apply currency formatting to Net and Royalties columns."""
+    try:
+        net_idx = df_to_format.columns.get_loc('Net')
+        royalties_idx = df_to_format.columns.get_loc('Royalties')
+  
+        requests = []
+        for column_idx in [net_idx, royalties_idx]:
+            requests.append({
+                'repeatCell': {
+                    'range': {
+                        'sheetId': 0,
+                        'startColumnIndex': column_idx,
+                        'endColumnIndex': column_idx + 1,
+                        'startRowIndex': 1
+                    },
+                    'cell': {
+                        'userEnteredFormat': {
+                            'numberFormat': {
+                                'type': 'CURRENCY',
+                                'pattern': '"$"#,##0.00'
+                            }
+                        }
+                    },
+                    'fields': 'userEnteredFormat.numberFormat'
+                }
+            })
+        # for column_idx, column_letter in [(net_idx, chr(65 + net_idx)),
+        #                                 (royalties_idx, chr(65 + royalties_idx))]:
+        #     requests.append({
+        #         'repeatCell': {
+        #             'range': {
+        #                 'sheetId': 0,
+        #                 'startColumnIndex': column_idx,
+        #                 'endColumnIndex': column_idx + 1,
+        #                 'startRowIndex': 1
+        #             },
+        #             'cell': {
+        #                 'userEnteredFormat': {
+        #                     'numberFormat': {
+        #                         'type': 'CURRENCY',
+        #                         'pattern': '"$"#,##0.00'
+        #                     }
+        #                 }
+        #             },
+        #             'fields': 'userEnteredFormat.numberFormat'
+        #         }
+        #     })
+    
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={'requests': requests}
+        ).execute()
+    except Exception as e:
+        print(f"Warning: Could not apply currency formatting: {str(e)}")
+
+def update_google_sheet(update_df, spreadsheet_id, credentials_path):
+    """Update Google Sheet with new data, avoiding duplicates and applying formatting."""
+    try:
+        service = get_sheet_service(credentials_path)
         new_month = update_df['Month'].iloc[0]
         new_year = update_df['Year'].iloc[0]
-        print(f"\nChecking for existing data for {new_month} {new_year}...")
-
-        # First, check if Sheet1 has any data and get headers
-        # pylint: disable=no-member
-        result = service.spreadsheets().values().get(
-            spreadsheetId=spreadsheet_id,
-            range='Sheet1!A:I'
-        ).execute()
-        # pylint: disable=no-member
-        print("Accessed Google Sheet")
-
-        if 'values' not in result or not result['values']:
-            print("Sheet is empty, adding headers and data...")
-            headers = update_df.columns.tolist()
-            values = [[clean_value_for_sheets(value)
-                       for value in row] for row in update_df.values.tolist()]
-            values.insert(0, headers)
-            range_name = 'Sheet1!A1'
-            start_row = 1
-        else:
-            existing_data = result['values']
-            headers = existing_data[0]
-
-            # Find Month and Year column indices
-            try:
-                month_idx = headers.index('Month')
-                year_idx = headers.index('Year')
-            except ValueError:
-                raise ValueError("Could not find Month or Year columns in existing sheet")
-
-            # Check for existing entries with same month/year
-            duplicate_found = False
-            for row in existing_data[1:]:
-                if (len(row) > max(month_idx, year_idx) and
-                    row[month_idx] == new_month and
-                    str(row[year_idx]) == str(new_year)):
-                    duplicate_found = True
-                    break
-
-            if duplicate_found:
-                print(f"Data for {new_month} {new_year} already exists in sheet. Skipping update.")
-                return False
-
-            print(f"No existing data found for {new_month} {new_year}. Proceeding with update...")
-            values = [[clean_value_for_sheets(value)
-                       for value in row] for row in update_df.values.tolist()]
-            start_row = len(existing_data) + 1
-            range_name = f'Sheet1!A{start_row}'
-
-        # Update the sheet with the new data
-        # pylint: disable=no-member
-        result = service.spreadsheets().values().update(
+    
+        existing_data = get_existing_sheet_data(service, spreadsheet_id)
+    
+        if check_for_duplicate_entry(existing_data, new_month, new_year):
+            print(f"Data for {new_month} {new_year} already exists in sheet. Skipping update.")
+            return False
+        
+        values, range_name = prepare_update_data(update_df, existing_data)
+    
+        service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=range_name,
             valueInputOption='RAW',
             body={'values': values}
         ).execute()
-        # pylint: disable=no-member
-
-        print(f"Updated Google Sheet: {result.get('updatedCells')} cells updated at {range_name}")
-
-        # Apply currency formatting to Net and Royalties columns
-        try:
-            # Find the indices for Net and Royalties columns
-            net_idx = update_df.columns.get_loc('Net')
-            royalties_idx = update_df.columns.get_loc('Royalties')
-
-            # Convert column indices to A1 notation
-            net_column = chr(65 + net_idx)  # 65 is ASCII for 'A'
-            royalties_column = chr(65 + royalties_idx)
-
-            # Create formatting request
-            requests = []
-            for column in [(net_idx, net_column), (royalties_idx, royalties_column)]:
-                requests.append({
-                    'repeatCell': {
-                        'range': {
-                            'sheetId': 0,  # Sheet1 is usually ID 0
-                            'startColumnIndex': column,
-                            'endColumnIndex': column + 1,
-                            'startRowIndex': 1  # Skip header row
-                        },
-                        'cell': {
-                            'userEnteredFormat': {
-                                'numberFormat': {
-                                    'type': 'CURRENCY',
-                                    'pattern': '"$"#,##0.00'
-                                }
-                            }
-                        },
-                        'fields': 'userEnteredFormat.numberFormat'
-                    }
-                })
-
-            # Apply the formatting
-            body = {'requests': requests}
-            # pylint: disable=no-member
-            service.spreadsheets().batchUpdate(
-                spreadsheetId=spreadsheet_id,
-                body=body
-            ).execute()
-            # pylint: disable=no-member
-
-            print(f"Applied currency formatting to columns {net_column} and {royalties_column}")
-
-        except Exception as e:
-            print(f"Warning: Could not apply currency formatting: {str(e)}")
-
+    
+        apply_currency_formatting(service, spreadsheet_id, update_df)
         return True
-
+     
     except HttpError as error:
         print(f"An error occurred: {error}")
-        print("\nDebug: Error details:")
         print(f"Spreadsheet ID: {spreadsheet_id}")
         raise
     except Exception as e:
@@ -500,7 +503,7 @@ if __name__ == "__main__":
 
     #store the credentials in the environment variables
     # $env:GOOGLE_SHEETS_CREDENTIALS = "my_key_name_here.json"
-    # env:GOOGLE_SHEETS_SPREADSHEET_ID = "my_spreadsheet_id_here"
+    # $env:GOOGLE_SHEETS_SPREADSHEET_ID = "my_spreadsheet_id_here"
     GOOGLE_SHEETS_CREDENTIALS = os.getenv('GOOGLE_SHEETS_CREDENTIALS')
     SPREADSHEET_ID = os.getenv('GOOGLE_SHEETS_SPREADSHEET_ID')
 
