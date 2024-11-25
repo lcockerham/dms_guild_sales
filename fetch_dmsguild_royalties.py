@@ -62,23 +62,6 @@ from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-
-def save_to_local_file(df_to_save, output_dir="reports"):
-    """Save DataFrame to a local CSV file in the specified directory."""
-    # Create reports directory if it doesn't exist
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    # Generate filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m")
-    filename = f"dmsguild_report_{timestamp}.csv"
-    filepath = os.path.join(output_dir, filename)
-
-    # Save to CSV
-    df_to_save.to_csv(filepath, index=False)
-    print(f"Report saved to: {filepath}")
-    return filepath
-
 def get_sheet_service(credentials_path):
     """Initialize and return Google Sheets service."""
     creds = service_account.Credentials.from_service_account_file(
@@ -400,12 +383,23 @@ def handle_error(error):
 
 def get_report_filepath(output_dir="reports"):
     """Generate the expected filepath for the current month's report."""
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    abs_output_dir = os.path.abspath(output_dir)
+    
+    if not os.path.exists(abs_output_dir):
+        os.makedirs(abs_output_dir)
 
     timestamp = datetime.now().strftime("%Y%m")
     filename = f"dmsguild_report_{timestamp}.csv"
-    return os.path.join(output_dir, filename)
+    return os.path.join(abs_output_dir, filename)
+
+def save_to_local_file(df_to_save, output_dir="reports"):
+    """Save DataFrame to a local CSV file in the specified directory."""
+    #filepath = get_report_filepath(output_dir)
+    #print(f"filepath: {filepath}")
+    
+    # Save to CSV
+    df_to_save.to_csv(output_dir, index=False)
+    return output_dir
 
 def load_existing_report(filepath):
     """Load an existing report if it exists."""
