@@ -208,68 +208,69 @@ def generate_html(df: pd.DataFrame) -> str:
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #1a1a2e;
-      color: #e0e0e0;
+      background: #f5f5f5;
+      color: #111;
       margin: 0;
-      padding: 16px;
+      padding: 24px;
+      font-size: 16px;
     }}
     h1 {{
-      color: #c9a84c;
+      color: #111;
       text-align: center;
-      font-size: 1.8rem;
-      margin: 0 0 4px;
+      font-size: 2.2rem;
+      margin: 0 0 6px;
     }}
     .subtitle {{
       text-align: center;
-      color: #888;
-      font-size: 0.85rem;
-      margin-bottom: 24px;
+      color: #444;
+      font-size: 1rem;
+      margin-bottom: 28px;
     }}
     .cards {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 12px;
-      margin-bottom: 24px;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
     }}
     .card {{
-      background: #16213e;
-      border: 1px solid #0f3460;
+      background: #fff;
+      border: 1px solid #ddd;
       border-radius: 8px;
-      padding: 14px 16px;
+      padding: 18px 20px;
     }}
     .card-label {{
-      font-size: 0.72rem;
+      font-size: 0.82rem;
       text-transform: uppercase;
       letter-spacing: .06em;
-      color: #888;
-      margin-bottom: 4px;
+      color: #555;
+      margin-bottom: 6px;
     }}
     .card-value {{
-      font-size: 1.5rem;
+      font-size: 1.8rem;
       font-weight: 700;
-      color: #c9a84c;
+      color: #111;
     }}
     .card-sub {{
-      font-size: 0.75rem;
-      color: #aaa;
-      margin-top: 2px;
+      font-size: 0.85rem;
+      color: #555;
+      margin-top: 4px;
     }}
     .charts {{
       display: grid;
       grid-template-columns: 1fr;
-      gap: 20px;
+      gap: 24px;
     }}
     .chart-box {{
-      background: #16213e;
-      border: 1px solid #0f3460;
+      background: #fff;
+      border: 1px solid #ddd;
       border-radius: 8px;
-      padding: 16px;
+      padding: 20px;
     }}
     .chart-title {{
-      font-size: 0.9rem;
+      font-size: 1.1rem;
       font-weight: 600;
-      color: #c9a84c;
-      margin-bottom: 8px;
+      color: #111;
+      margin-bottom: 12px;
     }}
     @media (min-width: 900px) {{
       .charts {{ grid-template-columns: 1fr 1fr; }}
@@ -278,26 +279,26 @@ def generate_html(df: pd.DataFrame) -> str:
     table {{
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.82rem;
+      font-size: 0.95rem;
     }}
     th {{
       text-align: left;
-      color: #c9a84c;
-      padding: 6px 8px;
-      border-bottom: 1px solid #0f3460;
+      color: #111;
+      padding: 8px 10px;
+      border-bottom: 2px solid #ddd;
     }}
     td {{
-      padding: 5px 8px;
-      border-bottom: 1px solid #1e2d50;
-      color: #ccc;
+      padding: 7px 10px;
+      border-bottom: 1px solid #eee;
+      color: #111;
     }}
     tr:last-child td {{ border-bottom: none; }}
     .num {{ text-align: right; }}
     .generated {{
       text-align: center;
-      font-size: 0.72rem;
-      color: #555;
-      margin-top: 24px;
+      font-size: 0.82rem;
+      color: #777;
+      margin-top: 28px;
     }}
   </style>
 </head>
@@ -395,11 +396,11 @@ def generate_html(df: pd.DataFrame) -> str:
 const COLORS = {js_array(COLORS)};
 const layout_base = {{
   paper_bgcolor: "transparent",
-  plot_bgcolor: "transparent",
-  font: {{ color: "#ccc", size: 11 }},
-  margin: {{ t: 10, r: 10, b: 50, l: 55 }},
-  xaxis: {{ gridcolor: "#1e2d50", linecolor: "#1e2d50" }},
-  yaxis: {{ gridcolor: "#1e2d50", linecolor: "#1e2d50", tickprefix: "$" }},
+  plot_bgcolor: "#fff",
+  font: {{ color: "#111", size: 13 }},
+  margin: {{ t: 10, r: 10, b: 60, l: 70 }},
+  xaxis: {{ gridcolor: "#e0e0e0", linecolor: "#ccc", tickfont: {{ size: 13 }} }},
+  yaxis: {{ gridcolor: "#e0e0e0", linecolor: "#ccc", tickprefix: "$", tickfont: {{ size: 13 }} }},
   showlegend: false,
   hovermode: "x unified",
 }};
@@ -445,8 +446,8 @@ const layout_base = {{
 
     html += f"""
   Plotly.newPlot("chart-trend", traces,
-    {{...layout_base, showlegend: true,
-      legend: {{ orientation: "h", y: -0.15, font: {{ size: 10 }} }} }},
+    {{...layout_base, height: 420, showlegend: true,
+      legend: {{ orientation: "h", y: -0.18, font: {{ size: 13 }} }} }},
     {{responsive: true}});
 }})();
 
@@ -464,8 +465,8 @@ const layout_base = {{
     hovertemplate: "%{{x}}<br>" + t + ": $%{{y:.2f}}<extra></extra>",
   }}));
   Plotly.newPlot("chart-stacked", traces,
-    {{...layout_base, showlegend: true,
-      legend: {{ orientation: "h", y: -0.2, font: {{ size: 9 }} }} }},
+    {{...layout_base, height: 420, showlegend: true,
+      legend: {{ orientation: "h", y: -0.22, font: {{ size: 12 }} }} }},
     {{responsive: true}});
 }})();
 
@@ -478,10 +479,10 @@ const layout_base = {{
        marker: {{ color: COLORS[0] }},
        hovertemplate: "%{{y}}<br>$%{{x:.2f}}<extra></extra>" }}],
     {{...layout_base,
-      height: 340,
+      height: 420,
       xaxis: {{...layout_base.xaxis, tickprefix: "$"}},
-      yaxis: {{...layout_base.yaxis, tickprefix: "", automargin: true}},
-      margin: {{t:10, r:10, b:40, l:200}} }},
+      yaxis: {{...layout_base.yaxis, tickprefix: "", automargin: true, tickfont: {{ size: 13 }} }},
+      margin: {{t:10, r:10, b:50, l:240}} }},
     {{responsive: true}});
 }})();
 
@@ -493,7 +494,7 @@ const layout_base = {{
     [{{ x: years, y: vals, type: "bar",
        marker: {{ color: vals.map((v, i) => COLORS[i % COLORS.length]) }},
        hovertemplate: "%{{x}}<br>$%{{y:.2f}}<extra></extra>" }}],
-    {{...layout_base, xaxis: {{...layout_base.xaxis, tickprefix: ""}} }},
+    {{...layout_base, height: 420, xaxis: {{...layout_base.xaxis, tickprefix: ""}} }},
     {{responsive: true}});
 }})();
 </script>
