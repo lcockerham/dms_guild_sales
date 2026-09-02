@@ -162,6 +162,9 @@ cython_debug/
 #.idea/
 
 credentials.txt
+env_variables.txt
+.playwright-mcp/
+dashboard.html
 
 *.json
 *.html

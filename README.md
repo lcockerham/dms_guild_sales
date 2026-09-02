@@ -1,73 +1,42 @@
-# DMs Guild Royalty Report Fetcher
+# DMs Guild Sales Dashboard
 
-An automated tool to fetch royalty reports from DMs Guild and sync them to Google Sheets.
+Fetches monthly royalty reports from DMs Guild and generates an interactive sales dashboard.
 
-## Overview
+## Monthly workflow
 
-This script automates the process of:
-1. Logging into DMs Guild
-2. Retrieving last month's royalty report
-3. Saving the data locally as CSV
-4. Syncing the data to a specified Google Sheet
+**Step 1 — Fetch data**
 
-## Prerequisites
+Ask Claude Code to fetch this month's royalty data. It logs into DMs Guild via Playwright, extracts the report table, and saves it to `reports/dmsguild_report_YYYYMM.csv`.
 
-- Python 3.x
-- Chrome browser
-- Google Cloud project with Sheets API enabled
-- Service account credentials for Google Sheets API
+**Step 2 — Regenerate dashboard**
 
-### Required Python Packages
-
+```bash
+python generate_dashboard.py
 ```
-selenium
-pandas
-beautifulsoup4
-google-api-python-client
-python-dateutil
-numpy
-```
+
+Opens `dashboard.html` in your browser with:
+- Monthly royalties trend + 12-month forecast
+- Revenue by title over time (stacked area)
+- Top products by total royalties
+- Year-over-year comparison
+- Per-title performance table (total $, units, avg $/month)
 
 ## Setup
 
-1. Install required packages:
-   ```bash
-   pip install selenium pandas beautifulsoup4 google-api-python-client python-dateutil numpy
-   ```
-
-2. Configure credentials:
-   - `credentials.txt` for DMs Guild login will be created on first run
-   - Place Google Sheets service account JSON file in project directory
-
-3. Create the following environment variables:
-    - Encryption key for credentials file: $env:DMSGUILD_ENCRYPTION_KEY = "my_key_here"
-    - Google Sheets API Key: $env:GOOGLE_SHEETS_CREDENTIALS = "my_key_name_here.json"
-    - Google Sheets spredsheet ID: env:GOOGLE_SHEETS_SPREADSHEET_ID = "my_spreadsheet_id_here"
-
-## Usage
-
-Run the script:
 ```bash
-python fetch_dmsguild_royalties.py
+pip install -r requirements.txt
 ```
 
-The script will:
-- Check for existing report for current month
-- If none exists, fetch new data from DMs Guild
-- Save report locally in `reports/` directory
-- Update configured Google Sheet
+Credentials are stored in `credentials.txt` (gitignored). The encryption key lives in `env_variables.txt` (also gitignored).
 
-## Features
+## Project structure
 
-- Secure credential storage with basic encryption
-- Automated web navigation and data extraction
-- Local CSV backup of reports
-- Duplicate prevention in Google Sheets
-- Currency formatting in Google Sheets
-- Data verification before upload
-
-## Security Notes
-
-- DMs Guild credentials are stored with basic encryption
-- Google service account credentials should be kept secure
-- Update encryption key in production deployment
+```
+├── parse_report.py          # HTML → CSV parser (used by Claude during data fetch)
+├── generate_dashboard.py    # Reads reports/, writes dashboard.html
+├── dashboard.html           # Generated output — open in any browser (gitignored)
+├── reports/                 # Monthly CSV files (gitignored)
+└── DND_Classics/            # Separate analysis of D&D Classics product catalogue
+    ├── get_product_info.py
+    └── DND_Classics_Analysis.ipynb
+```
