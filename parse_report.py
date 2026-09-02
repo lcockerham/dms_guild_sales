@@ -9,6 +9,8 @@ Usage:
     df = process_sales_table(table_html, month=2, year=2026)
     save_report(df)
 """
+from __future__ import annotations
+
 import calendar
 import os
 from datetime import date
@@ -36,14 +38,17 @@ def process_sales_table(html: str, month: int, year: int) -> pd.DataFrame:
         if len(cols) != 7:
             continue
         try:
+            net = cols[4].text.strip().replace("$", "").replace(",", "")
+            royalty_rate = cols[5].text.strip().replace("%", "")
+            royalties = cols[6].text.strip().replace("$", "").replace(",", "")
             data_rows.append({
                 "Publisher":    cols[0].text.strip(),
                 "Title":        cols[1].text.strip(),
                 "SKU":          cols[2].text.strip(),
                 "Units_Sold":   int(cols[3].text.strip() or "0"),
-                "Net":          float(cols[4].text.strip().replace("$", "").replace(",", "") or "0"),
-                "Royalty_Rate": float(cols[5].text.strip().replace("%", "") or "0"),
-                "Royalties":    float(cols[6].text.strip().replace("$", "").replace(",", "") or "0"),
+                "Net":          float(net or "0"),
+                "Royalty_Rate": float(royalty_rate or "0"),
+                "Royalties":    float(royalties or "0"),
             })
         except (IndexError, ValueError) as exc:
             print(f"Skipping row: {exc}")
@@ -54,7 +59,10 @@ def process_sales_table(html: str, month: int, year: int) -> pd.DataFrame:
     df = pd.DataFrame(data_rows)
     df["Month"] = calendar.month_name[month]
     df["Year"] = year
-    return df[["Month", "Year", "Publisher", "Title", "SKU", "Units_Sold", "Net", "Royalty_Rate", "Royalties"]]
+    return df[[
+        "Month", "Year", "Publisher", "Title", "SKU",
+        "Units_Sold", "Net", "Royalty_Rate", "Royalties",
+    ]]
 
 
 def save_report(df: pd.DataFrame, output_dir: str = "reports") -> str:
@@ -70,12 +78,16 @@ def save_report(df: pd.DataFrame, output_dir: str = "reports") -> str:
 
 def load_all_reports(reports_dir: str = "reports") -> pd.DataFrame:
     """Load and concatenate all monthly CSV files."""
-    files = sorted(f for f in os.listdir(reports_dir) if f.startswith("dmsguild_report_") and f.endswith(".csv"))
+    files = sorted(
+        f for f in os.listdir(reports_dir)
+        if f.startswith("dmsguild_report_") and f.endswith(".csv")
+    )
     if not files:
         raise FileNotFoundError(f"No report CSVs found in {reports_dir}/")
     frames = [pd.read_csv(os.path.join(reports_dir, f)) for f in files]
     df = pd.concat(frames, ignore_index=True)
     month_order = list(calendar.month_name)[1:]
     df["Month"] = pd.Categorical(df["Month"], categories=month_order, ordered=True)
-    df["Period"] = pd.to_datetime(df["Year"].astype(str) + "-" + df["Month"].cat.codes.add(1).astype(str).str.zfill(2))
+    month_num = df["Month"].cat.codes.add(1).astype(str).str.zfill(2)
+    df["Period"] = pd.to_datetime(df["Year"].astype(str) + "-" + month_num)
     return df.sort_values("Period")
