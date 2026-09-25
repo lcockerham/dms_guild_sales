@@ -531,16 +531,23 @@ const layout_base = {{
 
 // ── Top 10 titles ────────────────────────────────────────────────────────
 (function() {{
-  const names = {js_array(top10['Title'].tolist())}.map(t => t.length > 30 ? t.slice(0,28)+"…" : t);
+  // Full titles as categories so similar titles (ToFW Parts 1-3) don't merge;
+  // only the tick labels are shortened.
+  const titles = {js_array(top10['Title'].tolist())};
+  const names = titles.map(t => t.length > 45 ? t.slice(0,43)+"…" : t);
   const vals  = {js_array(top10['Total_Royalties'].round(2).tolist())};
   Plotly.newPlot("chart-top10",
-    [{{ x: vals, y: names, type: "bar", orientation: "h",
+    [{{ x: vals, y: titles, type: "bar", orientation: "h",
        marker: {{ color: COLORS[0] }},
        hovertemplate: "%{{y}}<br>$%{{x:.2f}}<extra></extra>" }}],
     {{...layout_base,
       height: 420,
-      xaxis: {{...layout_base.xaxis, tickprefix: "$"}},
-      yaxis: {{...layout_base.yaxis, tickprefix: "", automargin: true, tickfont: {{ size: 13 }} }},
+      // Explicit types: Plotly writes autotyped axis types back into the shared
+      // layout_base axes, so earlier charts leave xaxis as "category".
+      xaxis: {{...layout_base.xaxis, type: "linear", tickprefix: "$"}},
+      yaxis: {{...layout_base.yaxis, type: "category", tickprefix: "", automargin: true,
+        tickfont: {{ size: 13 }}, tickmode: "array", tickvals: titles, ticktext: names,
+        autorange: "reversed" }},
       margin: {{t:10, r:10, b:50, l:240}} }},
     {{responsive: true}});
 }})();
