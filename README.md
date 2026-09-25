@@ -19,7 +19,9 @@ Opens `dashboard.html` in your browser with:
 - Revenue by title over time (stacked area)
 - Top products by total royalties
 - Year-over-year comparison
-- Per-title performance table (total $, units, avg $/month)
+- Per-title performance table (total $, units, avg $/month, estimated bestseller metal)
+
+It also writes `../dms-guild-publishing/data/title_metals.json` (title → metal, `null` if none) so the publishing project can pick up badge changes.
 
 ## Setup
 
@@ -34,6 +36,7 @@ Credentials are stored in `credentials.txt` (gitignored). The encryption key liv
 ```
 ├── parse_report.py          # HTML → CSV parser (used by Claude during data fetch)
 ├── generate_dashboard.py    # Reads reports/, writes dashboard.html
+├── import_history.py        # One-time import of pre-2025 history from the old Google Sheet (.xlsx)
 ├── dashboard.html           # Generated output — open in any browser (gitignored)
 ├── reports/                 # Monthly CSV files (gitignored)
 └── DND_Classics/            # Separate analysis of D&D Classics product catalogue

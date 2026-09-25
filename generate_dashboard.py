@@ -23,6 +23,25 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 from parse_report import load_all_reports
 
 OUTPUT_FILE = "dashboard.html"
+# Title -> metal index consumed by the sibling publishing project for badge updates.
+METALS_FILE = os.path.join("..", "dms-guild-publishing", "data", "title_metals.json")
+
+# DMs Guild bestseller badges: (minimum qualifying units, metal), highest first.
+# https://help.dmsguild.com/hc/en-us/articles/12776910067991
+METAL_TIERS = [
+    (5001, "Adamantine"), (2501, "Mithral"), (1001, "Platinum"), (501, "Gold"),
+    (251, "Electrum"), (101, "Silver"), (51, "Copper"),
+]
+# Only sales of at least $0.20 count toward a badge, but reports give monthly
+# totals, so a PWYW month mixing $1 sales with free downloads can average above
+# $0.20. Counting only months averaging $0.50+ per unit matched all ten badges
+# confirmed on DMs Guild (2026-09-25); $0.20 over-counted Joy of Extradimensional Spaces.
+METAL_MIN_MONTHLY_AVG = 0.50
+
+
+def metal_for(units: int) -> str:
+    """Return the bestseller metal for a qualifying unit count, or '—' if none."""
+    return next((metal for threshold, metal in METAL_TIERS if units >= threshold), "—")
 
 
 # ---------------------------------------------------------------------------
@@ -41,16 +60,36 @@ def build_monthly_totals(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_title_totals(df: pd.DataFrame) -> pd.DataFrame:
     """Total royalties and units per product title, sorted descending."""
-    return (
-        df.groupby("Title")
+    # Approximate the badge rule: count a month's units only if they averaged
+    # at least METAL_MIN_MONTHLY_AVG each.
+    qualifying = df["Units_Sold"].where(df["Net"] >= METAL_MIN_MONTHLY_AVG * df["Units_Sold"], 0)
+    titles = (
+        df.assign(Metal_Units=qualifying)
+        .groupby("Title")
         .agg(
             Total_Royalties=("Royalties", "sum"),
             Total_Units=("Units_Sold", "sum"),
+            Metal_Units=("Metal_Units", "sum"),
             Months_Active=("Period", "nunique"),
         )
         .reset_index()
         .sort_values("Total_Royalties", ascending=False)
     )
+    titles["Metal"] = titles["Metal_Units"].map(metal_for)
+    return titles
+
+
+def write_title_metals(titles: pd.DataFrame, path: str = METALS_FILE) -> None:
+    """Write {title: metal} JSON; lowercase/null to match dms-guild-publishing's html_titles.py."""
+    metals = {
+        row["Title"]: None if row["Metal"] == "—" else row["Metal"].lower()
+        for _, row in titles.sort_values("Title").iterrows()
+    }
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as metals_file:
+        json.dump(metals, metals_file, indent=2, ensure_ascii=False)
+        metals_file.write("\n")
+    print(f"Saved -> {path}")
 
 
 def build_title_monthly(df: pd.DataFrame) -> pd.DataFrame:
@@ -83,6 +122,8 @@ def build_forecast(monthly: pd.DataFrame, periods: int = 12) -> dict:
     """
     series = monthly.set_index("Period")["Royalties"]
     series.index = pd.DatetimeIndex(series.index).to_period("M").to_timestamp("M")
+    # Months with no sales have no rows; treat them as $0 so the index is regular.
+    series = series.asfreq("ME", fill_value=0)
 
     if len(series) < 4:
         return {}
@@ -303,6 +344,7 @@ def generate_html(df: pd.DataFrame) -> str:  # pylint: disable=too-many-locals
     }}
     tr:last-child td {{ border-bottom: none; }}
     .num {{ text-align: right; }}
+    .table-note {{ font-size: 0.85rem; color: #666; margin-top: 10px; }}
     .generated {{
       text-align: center;
       font-size: 0.82rem;
@@ -380,6 +422,8 @@ def generate_html(df: pd.DataFrame) -> str:  # pylint: disable=too-many-locals
             <th class="num">Units</th>
             <th class="num">Months</th>
             <th class="num">Avg $/Mo</th>
+            <th class="num">Metal Units</th>
+            <th>Metal (est.)</th>
           </tr>
         </thead>
         <tbody>
@@ -392,11 +436,16 @@ def generate_html(df: pd.DataFrame) -> str:  # pylint: disable=too-many-locals
             <td class="num">{int(row['Total_Units'])}</td>
             <td class="num">{int(row['Months_Active'])}</td>
             <td class="num">${row['Avg_Monthly']:,.2f}</td>
+            <td class="num">{int(row['Metal_Units'])}</td>
+            <td>{row['Metal']}</td>
           </tr>
 """
 
     html += f"""        </tbody>
       </table>
+      <p class="table-note">Metal is estimated: only sales of $0.20+ count toward a badge, but
+        reports give monthly totals, so a month's units count only if they averaged
+        ${METAL_MIN_MONTHLY_AVG:.2f}+ each (calibrated against badges shown on DMs Guild).</p>
     </div>
 
   </div>
@@ -532,6 +581,8 @@ if __name__ == "__main__":
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         f.write(dashboard_html)
     print(f"Saved -> {OUTPUT_FILE}")
+
+    write_title_metals(build_title_totals(sales_df))
 
     abs_path = os.path.abspath(OUTPUT_FILE)
     webbrowser.open(f"file:///{abs_path}")
